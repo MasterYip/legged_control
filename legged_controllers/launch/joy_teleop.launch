@@ -1,7 +1,7 @@
 <?xml version="1.0" ?>
 
 <launch>
-    <arg name="joy_dev" default="/dev/input/js0"/>
+    <arg name="joy_dev" default="/dev/input/js1"/>
     <arg name="teleop_config" default="$(find legged_controllers)/config/joy.yaml"/>
 
     <node pkg="joy" type="joy_node" name="joy_node">

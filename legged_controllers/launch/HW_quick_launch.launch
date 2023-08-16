@@ -1,0 +1,18 @@
+<?xml version="1.0" ?>
+
+<launch>
+    <arg name="simulation" default="false"/>
+    <!-- Sim/HW -->
+    <include if="$(arg simulation)" file="$(find legged_unitree_description)/launch/empty_world.launch">
+    </include>
+    <include unless="$(arg simulation)" file="$(find legged_unitree_hw)/launch/legged_unitree_hw.launch">
+    </include>
+    <!-- Controller -->
+    <include file="$(find legged_controllers)/launch/load_controller.launch">
+    </include>
+    <!-- JoyStick -->
+    <include file="$(find legged_controllers)/launch/joy_teleop.launch">
+    </include>
+    
+    <node pkg="rqt_controller_manager" type="rqt_controller_manager" name="ctrl_manager"/>
+</launch>
