@@ -55,6 +55,12 @@ its dependencies following the step below.
    Ensure you can command the ANYmal as shown in
    the [document](https://leggedrobotics.github.io/ocs2/robotic_examples.html#legged-robot) and below.
    ![](https://leggedrobotics.github.io/ocs2/_images/legged_robot.gif)
+   ```bash
+   # Launch the example for DDP
+   roslaunch ocs2_legged_robot_ros legged_robot_ddp.launch
+   # OR launch the example for SQP
+   roslaunch ocs2_legged_robot_ros legged_robot_sqp.launch
+   ```
 
 ### Build
 
