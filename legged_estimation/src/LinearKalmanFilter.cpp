@@ -2,6 +2,13 @@
 // Created by qiayuan on 2022/7/24.
 //
 
+/********************************************************************************
+Modified Copyright (c) 2023-2024, BridgeDP Robotics.Co.Ltd. All rights reserved.
+
+For further information, contact: contact@bridgedp.com or visit our website
+at www.bridgedp.com.
+********************************************************************************/
+
 #include <pinocchio/fwd.hpp>
 
 #include <pinocchio/algorithm/frames.hpp>
@@ -9,15 +16,18 @@
 
 #include "legged_estimation/LinearKalmanFilter.h"
 
-#include <ocs2_legged_robot/common/Types.h>
+#include <legged_interface/common/Types.h>
 #include <ocs2_robotic_tools/common/RotationDerivativesTransforms.h>
 #include <ocs2_robotic_tools/common/RotationTransforms.h>
 
-namespace legged {
-
+namespace legged
+{
 KalmanFilterEstimate::KalmanFilterEstimate(PinocchioInterface pinocchioInterface, CentroidalModelInfo info,
                                            const PinocchioEndEffectorKinematics& eeKinematics)
-    : StateEstimateBase(std::move(pinocchioInterface), std::move(info), eeKinematics), tfListener_(tfBuffer_), topicUpdated_(false) {
+  : StateEstimateBase(std::move(pinocchioInterface), std::move(info), eeKinematics)
+  , tfListener_(tfBuffer_)
+  , topicUpdated_(false)
+{
   xHat_.setZero();
   ps_.setZero();
   vs_.setZero();
@@ -49,14 +59,16 @@ KalmanFilterEstimate::KalmanFilterEstimate(PinocchioInterface pinocchioInterface
   p_ = 100. * p_;
   q_.setIdentity();
   r_.setIdentity();
-  feetHeights_.setZero(4);
+  feetHeights_.setZero(info_.numThreeDofContacts);
   eeKinematics_->setPinocchioInterface(pinocchioInterface_);
 
   world2odom_.setRotation(tf2::Quaternion::getIdentity());
-  sub_ = ros::NodeHandle().subscribe<nav_msgs::Odometry>("/tracking_camera/odom/sample", 10, &KalmanFilterEstimate::callback, this);
+  sub_ = ros::NodeHandle().subscribe<nav_msgs::Odometry>("/tracking_camera/odom/sample", 10,
+                                                         &KalmanFilterEstimate::callback, this);
 }
 
-vector_t KalmanFilterEstimate::update(const ros::Time& time, const ros::Duration& period) {
+vector_t KalmanFilterEstimate::update(const ros::Time& time, const ros::Duration& period)
+{
   scalar_t dt = period.toSec();
   a_.block(0, 3, 3, 3) = dt * Eigen::Matrix<scalar_t, 3, 3>::Identity();
   b_.block(0, 0, 3, 3) = 0.5 * dt * dt * Eigen::Matrix<scalar_t, 3, 3>::Identity();
@@ -87,17 +99,21 @@ vector_t KalmanFilterEstimate::update(const ros::Time& time, const ros::Duration
   const auto eePos = eeKinematics_->getPosition(vector_t());
   const auto eeVel = eeKinematics_->getVelocity(vector_t(), vector_t());
 
+  // the covariance of the process noise
   Eigen::Matrix<scalar_t, 18, 18> q = Eigen::Matrix<scalar_t, 18, 18>::Identity();
   q.block(0, 0, 3, 3) = q_.block(0, 0, 3, 3) * imuProcessNoisePosition_;
   q.block(3, 3, 3, 3) = q_.block(3, 3, 3, 3) * imuProcessNoiseVelocity_;
   q.block(6, 6, 12, 12) = q_.block(6, 6, 12, 12) * footProcessNoisePosition_;
 
+  // the covariance of the observation noise
   Eigen::Matrix<scalar_t, 28, 28> r = Eigen::Matrix<scalar_t, 28, 28>::Identity();
   r.block(0, 0, 12, 12) = r_.block(0, 0, 12, 12) * footSensorNoisePosition_;
   r.block(12, 12, 12, 12) = r_.block(12, 12, 12, 12) * footSensorNoiseVelocity_;
-  r.block(24, 24, 4, 4) = r_.block(24, 24, 4, 4) * footHeightSensorNoise_;
+  const int fn = info_.numThreeDofContacts;
+  r.block(24, 24, fn, fn) = r_.block(24, 24, fn, fn) * footHeightSensorNoise_;
 
-  for (int i = 0; i < 4; i++) {
+  for (int i = 0; i < info_.numThreeDofContacts; i++)
+  {
     int i1 = 3 * i;
 
     int qIndex = 6 + i1;
@@ -120,32 +136,36 @@ vector_t KalmanFilterEstimate::update(const ros::Time& time, const ros::Duration
   vector3_t g(0, 0, -9.81);
   vector3_t accel = getRotationMatrixFromZyxEulerAngles(quatToZyx(quat_)) * linearAccelLocal_ + g;
 
+  // observation (or measurement)
   Eigen::Matrix<scalar_t, 28, 1> y;
   y << ps_, vs_, feetHeights_;
-  xHat_ = a_ * xHat_ + b_ * accel;
+  xHat_ = a_ * xHat_ + b_ * accel;  
   Eigen::Matrix<scalar_t, 18, 18> at = a_.transpose();
-  Eigen::Matrix<scalar_t, 18, 18> pm = a_ * p_ * at + q;
+  Eigen::Matrix<scalar_t, 18, 18> pm = a_ * p_ * at + q;  
   Eigen::Matrix<scalar_t, 18, 28> cT = c_.transpose();
   Eigen::Matrix<scalar_t, 28, 1> yModel = c_ * xHat_;
-  Eigen::Matrix<scalar_t, 28, 1> ey = y - yModel;
-  Eigen::Matrix<scalar_t, 28, 28> s = c_ * pm * cT + r;
+  Eigen::Matrix<scalar_t, 28, 1> ey = y - yModel;        
+  Eigen::Matrix<scalar_t, 28, 28> s = c_ * pm * cT + r;  
 
-  Eigen::Matrix<scalar_t, 28, 1> sEy = s.lu().solve(ey);
-  xHat_ += pm * cT * sEy;
+  Eigen::Matrix<scalar_t, 28, 1> sEy = s.lu().solve(ey);  
+  xHat_ += pm * cT * sEy;                                 
 
   Eigen::Matrix<scalar_t, 28, 18> sC = s.lu().solve(c_);
-  p_ = (Eigen::Matrix<scalar_t, 18, 18>::Identity() - pm * cT * sC) * pm;
+  p_ = (Eigen::Matrix<scalar_t, 18, 18>::Identity() - pm * cT * sC) *
+       pm;  
 
   Eigen::Matrix<scalar_t, 18, 18> pt = p_.transpose();
   p_ = (p_ + pt) / 2.0;
 
-  if (p_.block(0, 0, 2, 2).determinant() > 0.000001) {
+  if (p_.block(0, 0, 2, 2).determinant() > 0.000001)
+  {
     p_.block(0, 2, 2, 16).setZero();
     p_.block(2, 0, 16, 2).setZero();
     p_.block(0, 0, 2, 2) /= 10.;
   }
 
-  if (topicUpdated_) {
+  if (topicUpdated_)
+  {
     updateFromTopic();
     topicUpdated_ = false;
   }
@@ -155,37 +175,30 @@ vector_t KalmanFilterEstimate::update(const ros::Time& time, const ros::Duration
   auto odom = getOdomMsg();
   odom.header.stamp = time;
   odom.header.frame_id = "odom";
-  odom.child_frame_id = "base";
+  odom.child_frame_id = "base_link";
   publishMsgs(odom);
 
   return rbdState_;
 }
 
-void KalmanFilterEstimate::updateFromTopic() {
+void KalmanFilterEstimate::updateFromTopic()
+{
   auto* msg = buffer_.readFromRT();
 
   tf2::Transform world2sensor;
   world2sensor.setOrigin(tf2::Vector3(msg->pose.pose.position.x, msg->pose.pose.position.y, msg->pose.pose.position.z));
-  world2sensor.setRotation(tf2::Quaternion(msg->pose.pose.orientation.x, msg->pose.pose.orientation.y, msg->pose.pose.orientation.z,
-                                           msg->pose.pose.orientation.w));
+  world2sensor.setRotation(tf2::Quaternion(msg->pose.pose.orientation.x, msg->pose.pose.orientation.y,
+                                           msg->pose.pose.orientation.z, msg->pose.pose.orientation.w));
 
-  if (world2odom_.getRotation() == tf2::Quaternion::getIdentity())  // First received
-  {
-    tf2::Transform odom2sensor;
-    try {
-      geometry_msgs::TransformStamped tf_msg = tfBuffer_.lookupTransform("odom", msg->child_frame_id, msg->header.stamp);
-      tf2::fromMsg(tf_msg.transform, odom2sensor);
-    } catch (tf2::TransformException& ex) {
-      ROS_WARN("%s", ex.what());
-      return;
-    }
-    world2odom_ = world2sensor * odom2sensor.inverse();
-  }
   tf2::Transform base2sensor;
-  try {
-    geometry_msgs::TransformStamped tf_msg = tfBuffer_.lookupTransform("base", msg->child_frame_id, msg->header.stamp);
+  try
+  {
+    geometry_msgs::TransformStamped tf_msg =
+        tfBuffer_.lookupTransform("base_link", msg->child_frame_id, msg->header.stamp);
     tf2::fromMsg(tf_msg.transform, base2sensor);
-  } catch (tf2::TransformException& ex) {
+  }
+  catch (tf2::TransformException& ex)
+  {
     ROS_WARN("%s", ex.what());
     return;
   }
@@ -203,26 +216,30 @@ void KalmanFilterEstimate::updateFromTopic() {
   pinocchio::updateFramePlacements(model, data);
 
   xHat_.segment<3>(0) = newPos;
-  for (size_t i = 0; i < 4; ++i) {
+  for (size_t i = 0; i < 4; ++i)
+  {
     xHat_.segment<3>(6 + i * 3) = eeKinematics_->getPosition(vector_t())[i];
     xHat_(6 + i * 3 + 2) -= footRadius_;
-    if (contactFlag_[i]) {
+    if (contactFlag_[i])
+    {
       feetHeights_[i] = xHat_(6 + i * 3 + 2);
     }
   }
 
   auto odom = getOdomMsg();
   odom.header = msg->header;
-  odom.child_frame_id = "base";
+  odom.child_frame_id = "base_link";
   publishMsgs(odom);
 }
 
-void KalmanFilterEstimate::callback(const nav_msgs::Odometry::ConstPtr& msg) {
+void KalmanFilterEstimate::callback(const nav_msgs::Odometry::ConstPtr& msg)
+{
   buffer_.writeFromNonRT(*msg);
   topicUpdated_ = true;
 }
 
-nav_msgs::Odometry KalmanFilterEstimate::getOdomMsg() {
+nav_msgs::Odometry KalmanFilterEstimate::getOdomMsg()
+{
   nav_msgs::Odometry odom;
   odom.pose.pose.position.x = xHat_.segment<3>(0)(0);
   odom.pose.pose.position.y = xHat_.segment<3>(0)(1);
@@ -231,14 +248,15 @@ nav_msgs::Odometry KalmanFilterEstimate::getOdomMsg() {
   odom.pose.pose.orientation.y = quat_.y();
   odom.pose.pose.orientation.z = quat_.z();
   odom.pose.pose.orientation.w = quat_.w();
-  odom.pose.pose.orientation.x = quat_.x();
-  for (int i = 0; i < 3; ++i) {
-    for (int j = 0; j < 3; ++j) {
+  for (int i = 0; i < 3; ++i)
+  {
+    for (int j = 0; j < 3; ++j)
+    {
       odom.pose.covariance[i * 6 + j] = p_(i, j);
       odom.pose.covariance[6 * (3 + i) + (3 + j)] = orientationCovariance_(i * 3 + j);
     }
   }
-  //  The twist in this message should be specified in the coordinate frame given by the child_frame_id: "base"
+  //  The twist in this message should be specified in the coordinate frame given by the child_frame_id: "base_link"
   vector_t twist = getRotationMatrixFromZyxEulerAngles(quatToZyx(quat_)).transpose() * xHat_.segment<3>(3);
   odom.twist.twist.linear.x = twist.x();
   odom.twist.twist.linear.y = twist.y();
@@ -246,8 +264,10 @@ nav_msgs::Odometry KalmanFilterEstimate::getOdomMsg() {
   odom.twist.twist.angular.x = angularVelLocal_.x();
   odom.twist.twist.angular.y = angularVelLocal_.y();
   odom.twist.twist.angular.z = angularVelLocal_.z();
-  for (int i = 0; i < 3; ++i) {
-    for (int j = 0; j < 3; ++j) {
+  for (int i = 0; i < 3; ++i)
+  {
+    for (int j = 0; j < 3; ++j)
+    {
       odom.twist.covariance[i * 6 + j] = p_.block<3, 3>(3, 3)(i, j);
       odom.twist.covariance[6 * (3 + i) + (3 + j)] = angularVelCovariance_(i * 3 + j);
     }
@@ -255,11 +275,13 @@ nav_msgs::Odometry KalmanFilterEstimate::getOdomMsg() {
   return odom;
 }
 
-void KalmanFilterEstimate::loadSettings(const std::string& taskFile, bool verbose) {
+void KalmanFilterEstimate::loadSettings(const std::string& taskFile, bool verbose)
+{
   boost::property_tree::ptree pt;
   boost::property_tree::read_info(taskFile, pt);
   std::string prefix = "kalmanFilter.";
-  if (verbose) {
+  if (verbose)
+  {
     std::cerr << "\n #### Kalman Filter Noise:";
     std::cerr << "\n #### =============================================================================\n";
   }
