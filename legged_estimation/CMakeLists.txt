@@ -7,10 +7,10 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 find_package(catkin REQUIRED
         COMPONENTS
         roscpp
-        ocs2_legged_robot
         legged_common
         realtime_tools
         tf2_ros
+        legged_interface
         )
 
 find_package(PkgConfig REQUIRED)
@@ -23,10 +23,10 @@ catkin_package(
         ${PROJECT_NAME}
         CATKIN_DEPENDS
         roscpp
-        ocs2_legged_robot
         legged_common
         realtime_tools
         tf2_ros
+        legged_interface
 )
 
 ###########

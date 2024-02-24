@@ -5,32 +5,52 @@
 // Ref: https://github.com/bernhardpg/quadruped_locomotion
 //
 
+/********************************************************************************
+Modified Copyright (c) 2023-2024, BridgeDP Robotics.Co.Ltd. All rights reserved.
+
+For further information, contact: contact@bridgedp.com or visit our website
+at www.bridgedp.com.
+********************************************************************************/
+
 #pragma once
 
 #include <ocs2_core/Types.h>
 
 #include <utility>
 
-namespace legged {
+namespace legged
+{
 using namespace ocs2;
 
-class Task {
- public:
+// Ax -b = w
+// Dx - f <= v
+// w -> 0, v -> 0
+
+class Task
+{
+public:
   EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
   Task() = default;
 
-  Task(matrix_t a, vector_t b, matrix_t d, vector_t f) : a_(std::move(a)), d_(std::move(d)), b_(std::move(b)), f_(std::move(f)) {}
-
-  explicit Task(size_t numDecisionVars)
-      : Task(matrix_t::Zero(0, numDecisionVars), vector_t::Zero(0), matrix_t::Zero(0, numDecisionVars), vector_t::Zero(0)) {}
-
-  Task operator+(const Task& rhs) const {
-    return {concatenateMatrices(a_, rhs.a_), concatenateVectors(b_, rhs.b_), concatenateMatrices(d_, rhs.d_),
-            concatenateVectors(f_, rhs.f_)};
+  Task(matrix_t a, vector_t b, matrix_t d, vector_t f)
+    : a_(std::move(a)), d_(std::move(d)), b_(std::move(b)), f_(std::move(f))
+  {
   }
 
-  Task operator*(scalar_t rhs) const {  // clang-format off
+  explicit Task(size_t numDecisionVars)
+    : Task(matrix_t::Zero(0, numDecisionVars), vector_t::Zero(0), matrix_t::Zero(0, numDecisionVars), vector_t::Zero(0))
+  {
+  }
+
+  Task operator+(const Task& rhs) const
+  {
+    return { concatenateMatrices(a_, rhs.a_), concatenateVectors(b_, rhs.b_), concatenateMatrices(d_, rhs.d_),
+             concatenateVectors(f_, rhs.f_) };
+  }
+
+  Task operator*(scalar_t rhs) const
+  {  
     return {a_.cols() > 0 ? rhs * a_ : a_,
             b_.cols() > 0 ? rhs * b_ : b_,
             d_.cols() > 0 ? rhs * d_ : d_,
@@ -40,10 +60,14 @@ class Task {
   matrix_t a_, d_;
   vector_t b_, f_;
 
-  static matrix_t concatenateMatrices(matrix_t m1, matrix_t m2) {
-    if (m1.cols() <= 0) {
+  static matrix_t concatenateMatrices(matrix_t m1, matrix_t m2)
+  {
+    if (m1.cols() <= 0)
+    {
       return m2;
-    } else if (m2.cols() <= 0) {
+    }
+    else if (m2.cols() <= 0)
+    {
       return m1;
     }
     assert(m1.cols() == m2.cols());
@@ -52,10 +76,14 @@ class Task {
     return res;
   }
 
-  static vector_t concatenateVectors(const vector_t& v1, const vector_t& v2) {
-    if (v1.cols() <= 0) {
+  static vector_t concatenateVectors(const vector_t& v1, const vector_t& v2)
+  {
+    if (v1.cols() <= 0)
+    {
       return v2;
-    } else if (v2.cols() <= 0) {
+    }
+    else if (v2.cols() <= 0)
+    {
       return v1;
     }
     assert(v1.cols() == v2.cols());

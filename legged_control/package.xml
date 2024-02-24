@@ -3,14 +3,12 @@
     <name>legged_control</name>
     <version>0.0.0</version>
     <description>Meta package that contains package of legged.</description>
-    <maintainer email="liaoqiayuan@gmail.com">Qiayuan Liao</maintainer>
+    <maintainer email="contact@bridgedp.com">bridgedp</maintainer>
 
-    <license>BSD</license>
+    <license>MIT</license>
 
-    <url type="repository">https://github.com/qiayuanliao/legged_control</url>
-    <url type="bugtracker">https://github.com/qiayuanliao/legged_control/issues</url>
-
-    <author email="liaoqiayuan@gmail.com">Qiayuan Liao</author>
+    <url type="repository">https://github.com/bridgedp/hunter_bipedal_control</url>
+    <url type="bugtracker">https://github.com/bridgedp/hunter_bipedal_control/issues</url>
 
     <buildtool_depend>catkin</buildtool_depend>
 
@@ -18,3 +16,7 @@
         <metapackage/>
     </export>
 </package>
+
+
+
+
