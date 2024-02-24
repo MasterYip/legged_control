@@ -2,14 +2,22 @@
 // Created by qiayuan on 22-12-23.
 //
 
+/********************************************************************************
+Modified Copyright (c) 2023-2024, BridgeDP Robotics.Co.Ltd. All rights reserved.
+
+For further information, contact: contact@bridgedp.com or visit our website
+at www.bridgedp.com.
+********************************************************************************/
+
 #include "legged_wbc/WeightedWbc.h"
 
 #include <qpOASES.hpp>
 
-namespace legged {
-
-vector_t WeightedWbc::update(const vector_t& stateDesired, const vector_t& inputDesired, const vector_t& rbdStateMeasured, size_t mode,
-                             scalar_t period) {
+namespace legged
+{
+vector_t WeightedWbc::update(const vector_t& stateDesired, const vector_t& inputDesired,
+                             const vector_t& rbdStateMeasured, size_t mode, scalar_t period)
+{
   WbcBase::update(stateDesired, inputDesired, rbdStateMeasured, mode, period);
 
   // Constraints
@@ -28,7 +36,8 @@ vector_t WeightedWbc::update(const vector_t& stateDesired, const vector_t& input
 
   // Cost
   Task weighedTask = formulateWeightedTasks(stateDesired, inputDesired, period);
-  Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> H = weighedTask.a_.transpose() * weighedTask.a_;
+  Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> H =
+      weighedTask.a_.transpose() * weighedTask.a_;
   vector_t g = -weighedTask.a_.transpose() * weighedTask.b_;
 
   // Solve
@@ -44,25 +53,55 @@ vector_t WeightedWbc::update(const vector_t& stateDesired, const vector_t& input
   vector_t qpSol(getNumDecisionVars());
 
   qpProblem.getPrimalSolution(qpSol.data());
+
+  if (!qpProblem.isSolved())
+  {
+    std::cout << "ERROR: WeightWBC Not Solved!!!" << std::endl;
+    if (last_qpSol.size() > 0)
+      qpSol = last_qpSol;
+  }
+
+  last_qpSol = qpSol;
   return qpSol;
 }
 
-Task WeightedWbc::formulateConstraints() {
-  return formulateFloatingBaseEomTask() + formulateTorqueLimitsTask() + formulateFrictionConeTask() + formulateNoContactMotionTask();
+Task WeightedWbc::formulateConstraints()
+{
+  return formulateFloatingBaseEomTask() + formulateTorqueLimitsTask() + formulateFrictionConeTask();
 }
 
-Task WeightedWbc::formulateWeightedTasks(const vector_t& stateDesired, const vector_t& inputDesired, scalar_t period) {
-  return formulateSwingLegTask() * weightSwingLeg_ + formulateBaseAccelTask(stateDesired, inputDesired, period) * weightBaseAccel_ +
-         formulateContactForceTask(inputDesired) * weightContactForce_;
+Task WeightedWbc::formulateWeightedTasks(const vector_t& stateDesired, const vector_t& inputDesired, scalar_t period)
+{
+  if (stance_mode_)
+    return formulateStanceBaseAccelTask(stateDesired, inputDesired, period) * weightBaseAccel_;
+  else
+    return formulateSwingLegTask() * weightSwingLeg_ +
+           formulateBaseAccelTask(stateDesired, inputDesired, period) * weightBaseAccel_ +
+           formulateContactForceTask(inputDesired) * weightContactForce_;
 }
 
-void WeightedWbc::loadTasksSetting(const std::string& taskFile, bool verbose) {
+Task WeightedWbc::formulateStanceBaseAccelTask(const vector_t& stateDesired, const vector_t& inputDesired,
+                                               scalar_t period)
+{
+  matrix_t a(6, numDecisionVars_);
+  a.setZero();
+  a.block(0, 0, 6, 6) = matrix_t::Identity(6, 6);
+
+  vector6_t b;
+  b.setZero();
+
+  return { a, b, matrix_t(), vector_t() };
+}
+
+void WeightedWbc::loadTasksSetting(const std::string& taskFile, bool verbose)
+{
   WbcBase::loadTasksSetting(taskFile, verbose);
 
   boost::property_tree::ptree pt;
   boost::property_tree::read_info(taskFile, pt);
   std::string prefix = "weight.";
-  if (verbose) {
+  if (verbose)
+  {
     std::cerr << "\n #### WBC weight:";
     std::cerr << "\n #### =============================================================================\n";
   }
