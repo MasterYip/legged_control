@@ -35,6 +35,13 @@
 // Created by qiayuan on 2/10/21.
 //
 
+/********************************************************************************
+Modified Copyright (c) 2023-2024, BridgeDP Robotics.Co.Ltd. All rights reserved.
+
+For further information, contact: contact@bridgedp.com or visit our website
+at www.bridgedp.com.
+********************************************************************************/
+
 #pragma once
 
 #include <deque>
@@ -47,35 +54,41 @@
 #include <legged_common/hardware_interface/ContactSensorInterface.h>
 #include <legged_common/hardware_interface/HybridJointInterface.h>
 
-namespace legged {
-struct HybridJointData {
+namespace legged
+{
+struct HybridJointData
+{
   hardware_interface::JointHandle joint_;
   double posDes_{}, velDes_{}, kp_{}, kd_{}, ff_{};
 };
 
-struct HybridJointCommand {
+struct HybridJointCommand
+{
   ros::Time stamp_;
   double posDes_{}, velDes_{}, kp_{}, kd_{}, ff_{};
 };
 
-struct ImuData {
+struct ImuData
+{
   gazebo::physics::LinkPtr linkPtr_;
-  double ori_[4];            // NOLINT(modernize-avoid-c-arrays)
-  double oriCov_[9];         // NOLINT(modernize-avoid-c-arrays)
-  double angularVel_[3];     // NOLINT(modernize-avoid-c-arrays)
-  double angularVelCov_[9];  // NOLINT(modernize-avoid-c-arrays)
-  double linearAcc_[3];      // NOLINT(modernize-avoid-c-arrays)
-  double linearAccCov_[9];   // NOLINT(modernize-avoid-c-arrays)
+  double ori_[4];            
+  double oriCov_[9];         
+  double angularVel_[3];     
+  double angularVelCov_[9];  
+  double linearAcc_[3];      
+  double linearAccCov_[9];   
 };
 
-class LeggedHWSim : public gazebo_ros_control::DefaultRobotHWSim {
- public:
+class LeggedHWSim : public gazebo_ros_control::DefaultRobotHWSim
+{
+public:
   bool initSim(const std::string& robot_namespace, ros::NodeHandle model_nh, gazebo::physics::ModelPtr parent_model,
-               const urdf::Model* urdf_model, std::vector<transmission_interface::TransmissionInfo> transmissions) override;
+               const urdf::Model* urdf_model,
+               std::vector<transmission_interface::TransmissionInfo> transmissions) override;
   void readSim(ros::Time time, ros::Duration period) override;
   void writeSim(ros::Time time, ros::Duration period) override;
 
- private:
+private:
   void parseImu(XmlRpc::XmlRpcValue& imuDatas, const gazebo::physics::ModelPtr& parentModel);
   void parseContacts(XmlRpc::XmlRpcValue& contactNames);
 

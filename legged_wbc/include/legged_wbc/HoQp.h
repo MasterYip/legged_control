@@ -5,16 +5,25 @@
 // Ref: https://github.com/bernhardpg/quadruped_locomotion
 //
 
+/********************************************************************************
+Modified Copyright (c) 2023-2024, BridgeDP Robotics.Co.Ltd. All rights reserved.
+
+For further information, contact: contact@bridgedp.com or visit our website
+at www.bridgedp.com.
+********************************************************************************/
+
 #pragma once
 
 #include "legged_wbc/Task.h"
 
 #include <memory>
 
-namespace legged {
+namespace legged
+{
 // Hierarchical Optimization Quadratic Program
-class HoQp {
- public:
+class HoQp
+{
+public:
   EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
   using HoQpPtr = std::shared_ptr<HoQp>;
@@ -23,20 +32,33 @@ class HoQp {
 
   HoQp(Task task, HoQpPtr higherProblem);
 
-  matrix_t getStackedZMatrix() const { return stackedZ_; }
+  matrix_t getStackedZMatrix() const
+  {
+    return stackedZ_;
+  }
 
-  Task getStackedTasks() const { return stackedTasks_; }
+  Task getStackedTasks() const
+  {
+    return stackedTasks_;
+  }
 
-  vector_t getStackedSlackSolutions() const { return stackedSlackVars_; }
+  vector_t getStackedSlackSolutions() const
+  {
+    return stackedSlackVars_;
+  }
 
-  vector_t getSolutions() const {
+  vector_t getSolutions() const
+  {
     vector_t x = xPrev_ + stackedZPrev_ * decisionVarsSolutions_;
     return x;
   }
 
-  size_t getSlackedNumVars() const { return stackedTasks_.d_.rows(); }
+  size_t getSlackedNumVars() const
+  {
+    return stackedTasks_.d_.rows();
+  }
 
- private:
+private:
   void initVars();
   void formulateProblem();
   void solveProblem();
@@ -62,7 +84,6 @@ class HoQp {
   vector_t c_, f_;
   vector_t stackedSlackVars_, slackVarsSolutions_, decisionVarsSolutions_;
 
-  // Convenience matrices that are used multiple times
   matrix_t eyeNvNv_;
   matrix_t zeroNvNx_;
 };

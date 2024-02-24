@@ -35,6 +35,13 @@
 // Created by qiayuan on 12/30/20.
 //
 
+/********************************************************************************
+Modified Copyright (c) 2023-2024, BridgeDP Robotics.Co.Ltd. All rights reserved.
+
+For further information, contact: contact@bridgedp.com or visit our website
+at www.bridgedp.com.
+********************************************************************************/
+
 #pragma once
 
 #include "legged_hw/LeggedHW.h"
@@ -45,13 +52,14 @@
 #include <controller_manager/controller_manager.h>
 #include <ros/ros.h>
 
-namespace legged {
-
-class LeggedHWLoop {  // NOLINT(cppcoreguidelines-special-member-functions)
+namespace legged
+{
+class LeggedHWLoop
+{  // NOLINT(cppcoreguidelines-special-member-functions)
   using Clock = std::chrono::high_resolution_clock;
   using Duration = std::chrono::duration<double>;
 
- public:
+public:
   /** \brief Create controller manager. Load loop frequency. Start control loop which call @ref
    * legged::RmRobotHWLoop::update() in a frequency.
    *
@@ -71,7 +79,7 @@ class LeggedHWLoop {  // NOLINT(cppcoreguidelines-special-member-functions)
    */
   void update();
 
- private:
+private:
   // Startup and shutdown of the internal node inside a roscpp program
   ros::NodeHandle nh_;
 
