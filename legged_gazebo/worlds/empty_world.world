@@ -8,6 +8,7 @@
             <type>world</type>
             <max_step_size>0.001</max_step_size>
             <real_time_update_rate>1000</real_time_update_rate>
+            <!-- <real_time_factor>1.0</real_time_factor> -->
             <iters>500</iters>
         </physics>
         <!-- A global light source -->
