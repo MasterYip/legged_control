@@ -34,47 +34,41 @@ For further information, contact: contact@bridgedp.com or visit our website
 at www.bridgedp.com.
 ********************************************************************************/
 
-#include "legged_interface/initialization/LeggedRobotInitializer.h"
+#pragma once
 
-#include <ocs2_centroidal_model/AccessHelperFunctions.h>
-#include <legged_interface/common/utils.h>
+#include <ocs2_core/dynamics/SystemDynamicsBase.h>
+
+#include <ocs2_centroidal_model/PinocchioCentroidalDynamicsAD.h>
+#include <ocs2_pinocchio_interface/PinocchioInterface.h>
+
+#include "legged_interface/common/ModelSettings.h"
 
 namespace ocs2
 {
 namespace legged_robot
 {
-/******************************************************************************************************/
-/******************************************************************************************************/
-/******************************************************************************************************/
-LeggedRobotInitializer::LeggedRobotInitializer(CentroidalModelInfo info,
-                                               const SwitchedModelReferenceManager& referenceManager,
-                                               bool extendNormalizedMomentum)
-  : info_(std::move(info)), referenceManagerPtr_(&referenceManager), extendNormalizedMomentum_(extendNormalizedMomentum)
+class LeggedRobotDynamicsAD final : public SystemDynamicsBase
 {
-}
+public:
+  LeggedRobotDynamicsAD(const PinocchioInterface& pinocchioInterface, const CentroidalModelInfo& info,
+                        const std::string& modelName, const ModelSettings& modelSettings);
 
-/******************************************************************************************************/
-/******************************************************************************************************/
-/******************************************************************************************************/
-LeggedRobotInitializer* LeggedRobotInitializer::clone() const
-{
-  return new LeggedRobotInitializer(*this);
-}
-
-/******************************************************************************************************/
-/******************************************************************************************************/
-/******************************************************************************************************/
-void LeggedRobotInitializer::compute(scalar_t time, const vector_t& state, scalar_t nextTime, vector_t& input,
-                                     vector_t& nextState)
-{
-  const auto contactFlags = referenceManagerPtr_->getContactFlags(time);
-  input = weightCompensatingInput(info_, contactFlags);
-  nextState = state;
-  if (!extendNormalizedMomentum_)
+  ~LeggedRobotDynamicsAD() override = default;
+  LeggedRobotDynamicsAD* clone() const override
   {
-    centroidal_model::getNormalizedMomentum(nextState, info_).setZero();
+    return new LeggedRobotDynamicsAD(*this);
   }
-}
+
+  vector_t computeFlowMap(scalar_t time, const vector_t& state, const vector_t& input,
+                          const PreComputation& preComp) override;
+  VectorFunctionLinearApproximation linearApproximation(scalar_t time, const vector_t& state, const vector_t& input,
+                                                        const PreComputation& preComp) override;
+
+private:
+  LeggedRobotDynamicsAD(const LeggedRobotDynamicsAD& rhs) = default;
+
+  PinocchioCentroidalDynamicsAD pinocchioCentroidalDynamicsAd_;
+};
 
 }  // namespace legged_robot
 }  // namespace ocs2

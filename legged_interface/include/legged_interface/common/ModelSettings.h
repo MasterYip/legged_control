@@ -34,47 +34,36 @@ For further information, contact: contact@bridgedp.com or visit our website
 at www.bridgedp.com.
 ********************************************************************************/
 
-#include "legged_interface/initialization/LeggedRobotInitializer.h"
+#pragma once
 
-#include <ocs2_centroidal_model/AccessHelperFunctions.h>
-#include <legged_interface/common/utils.h>
+#include <iostream>
+#include <string>
+#include <vector>
+
+#include <ocs2_core/Types.h>
 
 namespace ocs2
 {
 namespace legged_robot
 {
-/******************************************************************************************************/
-/******************************************************************************************************/
-/******************************************************************************************************/
-LeggedRobotInitializer::LeggedRobotInitializer(CentroidalModelInfo info,
-                                               const SwitchedModelReferenceManager& referenceManager,
-                                               bool extendNormalizedMomentum)
-  : info_(std::move(info)), referenceManagerPtr_(&referenceManager), extendNormalizedMomentum_(extendNormalizedMomentum)
+struct ModelSettings
 {
-}
+  scalar_t positionErrorGain = 0.0;
 
-/******************************************************************************************************/
-/******************************************************************************************************/
-/******************************************************************************************************/
-LeggedRobotInitializer* LeggedRobotInitializer::clone() const
-{
-  return new LeggedRobotInitializer(*this);
-}
+  scalar_t phaseTransitionStanceTime = 0.4;
 
-/******************************************************************************************************/
-/******************************************************************************************************/
-/******************************************************************************************************/
-void LeggedRobotInitializer::compute(scalar_t time, const vector_t& state, scalar_t nextTime, vector_t& input,
-                                     vector_t& nextState)
-{
-  const auto contactFlags = referenceManagerPtr_->getContactFlags(time);
-  input = weightCompensatingInput(info_, contactFlags);
-  nextState = state;
-  if (!extendNormalizedMomentum_)
-  {
-    centroidal_model::getNormalizedMomentum(nextState, info_).setZero();
-  }
-}
+  bool verboseCppAd = true;
+  bool recompileLibrariesCppAd = true;
+  std::string modelFolderCppAd = "/tmp/ocs2";
+
+  std::vector<std::string> jointNames{ "leg_l1_joint", "leg_l2_joint", "leg_l3_joint", "leg_l4_joint", "leg_l5_joint",
+                                       "leg_r1_joint", "leg_r2_joint", "leg_r3_joint", "leg_r4_joint", "leg_r5_joint" };
+  std::vector<std::string> contactNames6DoF{};
+  std::vector<std::string> contactNames3DoF{ "leg_l_f1_link", "leg_r_f1_link", "leg_l_f2_link", "leg_r_f2_link" };
+};
+
+ModelSettings loadModelSettings(const std::string& filename, const std::string& fieldName = "model_settings",
+                                bool verbose = "true");
 
 }  // namespace legged_robot
 }  // namespace ocs2

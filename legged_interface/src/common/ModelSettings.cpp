@@ -34,46 +34,44 @@ For further information, contact: contact@bridgedp.com or visit our website
 at www.bridgedp.com.
 ********************************************************************************/
 
-#include "legged_interface/initialization/LeggedRobotInitializer.h"
+#include "legged_interface/common/ModelSettings.h"
 
-#include <ocs2_centroidal_model/AccessHelperFunctions.h>
-#include <legged_interface/common/utils.h>
+#include <boost/property_tree/info_parser.hpp>
+#include <boost/property_tree/ptree.hpp>
+
+#include <ocs2_core/misc/LoadData.h>
 
 namespace ocs2
 {
 namespace legged_robot
 {
-/******************************************************************************************************/
-/******************************************************************************************************/
-/******************************************************************************************************/
-LeggedRobotInitializer::LeggedRobotInitializer(CentroidalModelInfo info,
-                                               const SwitchedModelReferenceManager& referenceManager,
-                                               bool extendNormalizedMomentum)
-  : info_(std::move(info)), referenceManagerPtr_(&referenceManager), extendNormalizedMomentum_(extendNormalizedMomentum)
+ModelSettings loadModelSettings(const std::string& filename, const std::string& fieldName, bool verbose)
 {
-}
+  ModelSettings modelSettings;
 
-/******************************************************************************************************/
-/******************************************************************************************************/
-/******************************************************************************************************/
-LeggedRobotInitializer* LeggedRobotInitializer::clone() const
-{
-  return new LeggedRobotInitializer(*this);
-}
+  boost::property_tree::ptree pt;
+  boost::property_tree::read_info(filename, pt);
 
-/******************************************************************************************************/
-/******************************************************************************************************/
-/******************************************************************************************************/
-void LeggedRobotInitializer::compute(scalar_t time, const vector_t& state, scalar_t nextTime, vector_t& input,
-                                     vector_t& nextState)
-{
-  const auto contactFlags = referenceManagerPtr_->getContactFlags(time);
-  input = weightCompensatingInput(info_, contactFlags);
-  nextState = state;
-  if (!extendNormalizedMomentum_)
+  if (verbose)
   {
-    centroidal_model::getNormalizedMomentum(nextState, info_).setZero();
+    std::cerr << "\n #### Legged Robot Model Settings:";
+    std::cerr << "\n #### =============================================================================\n";
   }
+
+  loadData::loadPtreeValue(pt, modelSettings.positionErrorGain, fieldName + ".positionErrorGain", verbose);
+  loadData::loadPtreeValue(pt, modelSettings.phaseTransitionStanceTime, fieldName + ".phaseTransitionStanceTime",
+                           verbose);
+
+  loadData::loadPtreeValue(pt, modelSettings.verboseCppAd, fieldName + ".verboseCppAd", verbose);
+  loadData::loadPtreeValue(pt, modelSettings.recompileLibrariesCppAd, fieldName + ".recompileLibrariesCppAd", verbose);
+  loadData::loadPtreeValue(pt, modelSettings.modelFolderCppAd, fieldName + ".modelFolderCppAd", verbose);
+
+  if (verbose)
+  {
+    std::cerr << " #### =============================================================================" << std::endl;
+  }
+
+  return modelSettings;
 }
 
 }  // namespace legged_robot

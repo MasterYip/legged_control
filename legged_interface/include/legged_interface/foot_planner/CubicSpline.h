@@ -34,47 +34,56 @@ For further information, contact: contact@bridgedp.com or visit our website
 at www.bridgedp.com.
 ********************************************************************************/
 
-#include "legged_interface/initialization/LeggedRobotInitializer.h"
+#pragma once
 
-#include <ocs2_centroidal_model/AccessHelperFunctions.h>
-#include <legged_interface/common/utils.h>
+#include <ocs2_core/Types.h>
 
 namespace ocs2
 {
 namespace legged_robot
 {
-/******************************************************************************************************/
-/******************************************************************************************************/
-/******************************************************************************************************/
-LeggedRobotInitializer::LeggedRobotInitializer(CentroidalModelInfo info,
-                                               const SwitchedModelReferenceManager& referenceManager,
-                                               bool extendNormalizedMomentum)
-  : info_(std::move(info)), referenceManagerPtr_(&referenceManager), extendNormalizedMomentum_(extendNormalizedMomentum)
+class CubicSpline
 {
-}
-
-/******************************************************************************************************/
-/******************************************************************************************************/
-/******************************************************************************************************/
-LeggedRobotInitializer* LeggedRobotInitializer::clone() const
-{
-  return new LeggedRobotInitializer(*this);
-}
-
-/******************************************************************************************************/
-/******************************************************************************************************/
-/******************************************************************************************************/
-void LeggedRobotInitializer::compute(scalar_t time, const vector_t& state, scalar_t nextTime, vector_t& input,
-                                     vector_t& nextState)
-{
-  const auto contactFlags = referenceManagerPtr_->getContactFlags(time);
-  input = weightCompensatingInput(info_, contactFlags);
-  nextState = state;
-  if (!extendNormalizedMomentum_)
+public:
+  struct Node
   {
-    centroidal_model::getNormalizedMomentum(nextState, info_).setZero();
-  }
-}
+    scalar_t time;
+    scalar_t position;
+    scalar_t velocity;
+  };
+
+  CubicSpline(Node start, Node end);
+
+  scalar_t position(scalar_t time) const;
+
+  scalar_t velocity(scalar_t time) const;
+
+  scalar_t acceleration(scalar_t time) const;
+
+  scalar_t startTimeDerivative(scalar_t t) const;
+
+  scalar_t finalTimeDerivative(scalar_t t) const;
+
+  Node start_;
+  Node end_;
+
+private:
+  scalar_t normalizedTime(scalar_t t) const;
+
+  scalar_t t0_;
+  scalar_t t1_;
+  scalar_t dt_;
+
+  scalar_t c0_;
+  scalar_t c1_;
+  scalar_t c2_;
+  scalar_t c3_;
+
+  scalar_t dc0_;  // derivative w.r.t. dt_
+  scalar_t dc1_;  // derivative w.r.t. dt_
+  scalar_t dc2_;  // derivative w.r.t. dt_
+  scalar_t dc3_;  // derivative w.r.t. dt_
+};
 
 }  // namespace legged_robot
 }  // namespace ocs2

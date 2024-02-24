@@ -34,63 +34,95 @@ For further information, contact: contact@bridgedp.com or visit our website
 at www.bridgedp.com.
 ********************************************************************************/
 
-#include "legged_interface/constraint/ZeroForceConstraint.h"
+#pragma once
 
-#include <ocs2_centroidal_model/AccessHelperFunctions.h>
+#include <iostream>
+#include <map>
+#include <string>
+#include <vector>
+
+#include <boost/property_tree/info_parser.hpp>
+#include <boost/property_tree/ptree.hpp>
+
+#include <ocs2_core/misc/LoadData.h>
+
+#include "legged_interface/common/Types.h"
 
 namespace ocs2
 {
 namespace legged_robot
 {
-/******************************************************************************************************/
-/******************************************************************************************************/
-/******************************************************************************************************/
-ZeroForceConstraint::ZeroForceConstraint(const SwitchedModelReferenceManager& referenceManager,
-                                         size_t contactPointIndex, CentroidalModelInfo info)
-  : StateInputConstraint(ConstraintOrder::Linear)
-  , referenceManagerPtr_(&referenceManager)
-  , contactPointIndex_(contactPointIndex)
-  , info_(std::move(info))
+enum ModeNumber
 {
+  FLY = 0,
+  R = 1,
+  L = 2,
+  STANCE = 3,
+};
+
+/******************************************************************************************************/
+/******************************************************************************************************/
+/******************************************************************************************************/
+inline contact_flag_t modeNumber2StanceLeg(const size_t& modeNumber)
+{
+  contact_flag_t stanceLegs;
+
+  switch (modeNumber)
+  {
+    case 0:
+      stanceLegs = contact_flag_t{ false, false, false, false };
+      break;  // 0:
+    case 1:
+      stanceLegs = contact_flag_t{ false, true, false, true };
+      break;  // 1:
+    case 2:
+      stanceLegs = contact_flag_t{ true, false, true, false };
+      break;  // 2:
+    case 3:
+      stanceLegs = contact_flag_t{ true, true, true, true };
+      break;  // 3:
+  }
+
+  return stanceLegs;
 }
 
 /******************************************************************************************************/
 /******************************************************************************************************/
 /******************************************************************************************************/
-bool ZeroForceConstraint::isActive(scalar_t time) const
+inline size_t stanceLeg2ModeNumber(const contact_flag_t& stanceLegs)
 {
-  return !referenceManagerPtr_->getContactFlags(time)[contactPointIndex_];
+  return static_cast<size_t>(stanceLegs[1]) + 2 * static_cast<size_t>(stanceLegs[0]);
 }
 
 /******************************************************************************************************/
 /******************************************************************************************************/
 /******************************************************************************************************/
-vector_t ZeroForceConstraint::getValue(scalar_t time, const vector_t& state, const vector_t& input,
-                                       const PreComputation& preComp) const
+inline std::string modeNumber2String(const size_t& modeNumber)
 {
-  vector_t force(getNumConstraints(time));
-  force << centroidal_model::getContactForces(input, contactPointIndex_, info_);
-  return force;
+  // build the map from mode number to name
+  std::map<size_t, std::string> modeToName;
+  modeToName[FLY] = "FLY";
+  modeToName[R] = "R";
+  modeToName[L] = "L";
+  modeToName[STANCE] = "STANCE";
+
+  return modeToName[modeNumber];
 }
 
 /******************************************************************************************************/
 /******************************************************************************************************/
 /******************************************************************************************************/
-VectorFunctionLinearApproximation ZeroForceConstraint::getLinearApproximation(scalar_t time, const vector_t& state,
-                                                                              const vector_t& input,
-                                                                              const PreComputation& preComp) const
+inline size_t string2ModeNumber(const std::string& modeString)
 {
-  VectorFunctionLinearApproximation approx;
-  approx.f = getValue(time, state, input, preComp);
-  approx.dfdx = matrix_t::Zero(getNumConstraints(time), state.size());
-  approx.dfdu = matrix_t::Zero(getNumConstraints(time), input.size());
-  const size_t contactForceIndex = 3 * contactPointIndex_;
-  const size_t contactWrenchIndex =
-      3 * info_.numThreeDofContacts + 6 * (contactPointIndex_ - info_.numThreeDofContacts);
-  const size_t startRow = (contactPointIndex_ < info_.numThreeDofContacts) ? contactForceIndex : contactWrenchIndex;
-  approx.dfdu.middleCols(startRow, getNumConstraints(time)).diagonal() = vector_t::Ones(getNumConstraints(time));
-  return approx;
+  // build the map from name to mode number
+  std::map<std::string, size_t> nameToMode;
+  nameToMode["FLY"] = FLY;
+  nameToMode["R"] = R;
+  nameToMode["L"] = L;
+  nameToMode["STANCE"] = STANCE;
+
+  return nameToMode[modeString];
 }
 
 }  // namespace legged_robot
-}  // namespace ocs2
+}  // end of namespace ocs2

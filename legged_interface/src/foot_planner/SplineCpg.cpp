@@ -34,9 +34,7 @@ For further information, contact: contact@bridgedp.com or visit our website
 at www.bridgedp.com.
 ********************************************************************************/
 
-#include "legged_interface/constraint/ZeroForceConstraint.h"
-
-#include <ocs2_centroidal_model/AccessHelperFunctions.h>
+#include "legged_interface/foot_planner/SplineCpg.h"
 
 namespace ocs2
 {
@@ -45,51 +43,65 @@ namespace legged_robot
 /******************************************************************************************************/
 /******************************************************************************************************/
 /******************************************************************************************************/
-ZeroForceConstraint::ZeroForceConstraint(const SwitchedModelReferenceManager& referenceManager,
-                                         size_t contactPointIndex, CentroidalModelInfo info)
-  : StateInputConstraint(ConstraintOrder::Linear)
-  , referenceManagerPtr_(&referenceManager)
-  , contactPointIndex_(contactPointIndex)
-  , info_(std::move(info))
+SplineCpg::SplineCpg(CubicSpline::Node liftOff, scalar_t midHeight, CubicSpline::Node touchDown)
+  : midTime_((liftOff.time + touchDown.time) / 2)
+  , leftSpline_(liftOff, CubicSpline::Node{ midTime_, midHeight, 0.0 })
+  , rightSpline_(CubicSpline::Node{ midTime_, midHeight, 0.0 }, touchDown)
 {
 }
 
 /******************************************************************************************************/
 /******************************************************************************************************/
 /******************************************************************************************************/
-bool ZeroForceConstraint::isActive(scalar_t time) const
+scalar_t SplineCpg::position(scalar_t time) const
 {
-  return !referenceManagerPtr_->getContactFlags(time)[contactPointIndex_];
+  return (time < midTime_) ? leftSpline_.position(time) : rightSpline_.position(time);
 }
 
 /******************************************************************************************************/
 /******************************************************************************************************/
 /******************************************************************************************************/
-vector_t ZeroForceConstraint::getValue(scalar_t time, const vector_t& state, const vector_t& input,
-                                       const PreComputation& preComp) const
+scalar_t SplineCpg::velocity(scalar_t time) const
 {
-  vector_t force(getNumConstraints(time));
-  force << centroidal_model::getContactForces(input, contactPointIndex_, info_);
-  return force;
+  return (time < midTime_) ? leftSpline_.velocity(time) : rightSpline_.velocity(time);
 }
 
 /******************************************************************************************************/
 /******************************************************************************************************/
 /******************************************************************************************************/
-VectorFunctionLinearApproximation ZeroForceConstraint::getLinearApproximation(scalar_t time, const vector_t& state,
-                                                                              const vector_t& input,
-                                                                              const PreComputation& preComp) const
+scalar_t SplineCpg::acceleration(scalar_t time) const
 {
-  VectorFunctionLinearApproximation approx;
-  approx.f = getValue(time, state, input, preComp);
-  approx.dfdx = matrix_t::Zero(getNumConstraints(time), state.size());
-  approx.dfdu = matrix_t::Zero(getNumConstraints(time), input.size());
-  const size_t contactForceIndex = 3 * contactPointIndex_;
-  const size_t contactWrenchIndex =
-      3 * info_.numThreeDofContacts + 6 * (contactPointIndex_ - info_.numThreeDofContacts);
-  const size_t startRow = (contactPointIndex_ < info_.numThreeDofContacts) ? contactForceIndex : contactWrenchIndex;
-  approx.dfdu.middleCols(startRow, getNumConstraints(time)).diagonal() = vector_t::Ones(getNumConstraints(time));
-  return approx;
+  return (time < midTime_) ? leftSpline_.acceleration(time) : rightSpline_.acceleration(time);
+}
+
+/******************************************************************************************************/
+/******************************************************************************************************/
+/******************************************************************************************************/
+scalar_t SplineCpg::startTimeDerivative(scalar_t time) const
+{
+  if (time <= midTime_)
+  {
+    return leftSpline_.startTimeDerivative(time) + 0.5 * leftSpline_.startTimeDerivative(time);
+  }
+  else
+  {
+    return 0.5 * rightSpline_.startTimeDerivative(time);
+  }
+}
+
+/******************************************************************************************************/
+/******************************************************************************************************/
+/******************************************************************************************************/
+scalar_t SplineCpg::finalTimeDerivative(scalar_t time) const
+{
+  if (time <= midTime_)
+  {
+    return 0.5 * leftSpline_.finalTimeDerivative(time);
+  }
+  else
+  {
+    return rightSpline_.finalTimeDerivative(time) + 0.5 * rightSpline_.finalTimeDerivative(time);
+  }
 }
 
 }  // namespace legged_robot

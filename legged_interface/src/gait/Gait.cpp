@@ -34,9 +34,13 @@ For further information, contact: contact@bridgedp.com or visit our website
 at www.bridgedp.com.
 ********************************************************************************/
 
-#include "legged_interface/constraint/ZeroForceConstraint.h"
+#include "legged_interface/gait/Gait.h"
 
-#include <ocs2_centroidal_model/AccessHelperFunctions.h>
+#include <ocs2_core/misc/Display.h>
+
+#include <algorithm>
+#include <cassert>
+#include <cmath>
 
 namespace ocs2
 {
@@ -45,51 +49,96 @@ namespace legged_robot
 /******************************************************************************************************/
 /******************************************************************************************************/
 /******************************************************************************************************/
-ZeroForceConstraint::ZeroForceConstraint(const SwitchedModelReferenceManager& referenceManager,
-                                         size_t contactPointIndex, CentroidalModelInfo info)
-  : StateInputConstraint(ConstraintOrder::Linear)
-  , referenceManagerPtr_(&referenceManager)
-  , contactPointIndex_(contactPointIndex)
-  , info_(std::move(info))
+bool isValidGait(const Gait& gait)
 {
+  bool validGait = true;
+  validGait &= gait.duration > 0.0;
+  validGait &= std::all_of(gait.eventPhases.begin(), gait.eventPhases.end(),
+                           [](scalar_t phase) { return 0.0 < phase && phase < 1.0; });
+  validGait &= std::is_sorted(gait.eventPhases.begin(), gait.eventPhases.end());
+  validGait &= gait.eventPhases.size() + 1 == gait.modeSequence.size();
+  return validGait;
 }
 
 /******************************************************************************************************/
 /******************************************************************************************************/
 /******************************************************************************************************/
-bool ZeroForceConstraint::isActive(scalar_t time) const
+bool isValidPhase(scalar_t phase)
 {
-  return !referenceManagerPtr_->getContactFlags(time)[contactPointIndex_];
+  return phase >= 0.0 && phase < 1.0;
 }
 
 /******************************************************************************************************/
 /******************************************************************************************************/
 /******************************************************************************************************/
-vector_t ZeroForceConstraint::getValue(scalar_t time, const vector_t& state, const vector_t& input,
-                                       const PreComputation& preComp) const
+scalar_t wrapPhase(scalar_t phase)
 {
-  vector_t force(getNumConstraints(time));
-  force << centroidal_model::getContactForces(input, contactPointIndex_, info_);
-  return force;
+  phase = std::fmod(phase, 1.0);
+  if (phase < 0.0)
+  {
+    phase += 1.0;
+  }
+  return phase;
 }
 
 /******************************************************************************************************/
 /******************************************************************************************************/
 /******************************************************************************************************/
-VectorFunctionLinearApproximation ZeroForceConstraint::getLinearApproximation(scalar_t time, const vector_t& state,
-                                                                              const vector_t& input,
-                                                                              const PreComputation& preComp) const
+int getModeIndexFromPhase(scalar_t phase, const Gait& gait)
 {
-  VectorFunctionLinearApproximation approx;
-  approx.f = getValue(time, state, input, preComp);
-  approx.dfdx = matrix_t::Zero(getNumConstraints(time), state.size());
-  approx.dfdu = matrix_t::Zero(getNumConstraints(time), input.size());
-  const size_t contactForceIndex = 3 * contactPointIndex_;
-  const size_t contactWrenchIndex =
-      3 * info_.numThreeDofContacts + 6 * (contactPointIndex_ - info_.numThreeDofContacts);
-  const size_t startRow = (contactPointIndex_ < info_.numThreeDofContacts) ? contactForceIndex : contactWrenchIndex;
-  approx.dfdu.middleCols(startRow, getNumConstraints(time)).diagonal() = vector_t::Ones(getNumConstraints(time));
-  return approx;
+  assert(isValidPhase(phase));
+  assert(isValidGait(gait));
+  auto firstLargerValueIterator = std::upper_bound(gait.eventPhases.begin(), gait.eventPhases.end(), phase);
+  return static_cast<int>(firstLargerValueIterator - gait.eventPhases.begin());
+}
+
+/******************************************************************************************************/
+/******************************************************************************************************/
+/******************************************************************************************************/
+size_t getModeFromPhase(scalar_t phase, const Gait& gait)
+{
+  assert(isValidPhase(phase));
+  assert(isValidGait(gait));
+  return gait.modeSequence[getModeIndexFromPhase(phase, gait)];
+}
+
+/******************************************************************************************************/
+/******************************************************************************************************/
+/******************************************************************************************************/
+scalar_t timeLeftInGait(scalar_t phase, const Gait& gait)
+{
+  assert(isValidPhase(phase));
+  assert(isValidGait(gait));
+  return (1.0 - phase) * gait.duration;
+}
+
+/******************************************************************************************************/
+/******************************************************************************************************/
+/******************************************************************************************************/
+scalar_t timeLeftInMode(scalar_t phase, const Gait& gait)
+{
+  assert(isValidPhase(phase));
+  assert(isValidGait(gait));
+  int modeIndex = getModeIndexFromPhase(phase, gait);
+  if (modeIndex < gait.eventPhases.size())
+  {
+    return (gait.eventPhases[modeIndex] - phase) * gait.duration;
+  }
+  else
+  {
+    return timeLeftInGait(phase, gait);
+  }
+}
+
+/******************************************************************************************************/
+/******************************************************************************************************/
+/******************************************************************************************************/
+std::ostream& operator<<(std::ostream& stream, const Gait& gait)
+{
+  stream << "Duration:       " << gait.duration << "\n";
+  stream << "Event phases:  {" << toDelimitedString(gait.eventPhases) << "}\n";
+  stream << "Mode sequence: {" << toDelimitedString(gait.modeSequence) << "}\n";
+  return stream;
 }
 
 }  // namespace legged_robot

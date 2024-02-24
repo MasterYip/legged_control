@@ -34,9 +34,8 @@ For further information, contact: contact@bridgedp.com or visit our website
 at www.bridgedp.com.
 ********************************************************************************/
 
-#include "legged_interface/constraint/ZeroForceConstraint.h"
-
-#include <ocs2_centroidal_model/AccessHelperFunctions.h>
+#include "legged_interface/constraint/XYReferenceConstraintCppAd.h"
+#include "legged_interface/LeggedRobotPreComputation.h"
 
 namespace ocs2
 {
@@ -45,19 +44,31 @@ namespace legged_robot
 /******************************************************************************************************/
 /******************************************************************************************************/
 /******************************************************************************************************/
-ZeroForceConstraint::ZeroForceConstraint(const SwitchedModelReferenceManager& referenceManager,
-                                         size_t contactPointIndex, CentroidalModelInfo info)
+XYReferenceConstraintCppAd::XYReferenceConstraintCppAd(const SwitchedModelReferenceManager& referenceManager,
+                                                       const EndEffectorKinematics<scalar_t>& endEffectorKinematics,
+                                                       size_t contactPointIndex)
   : StateInputConstraint(ConstraintOrder::Linear)
   , referenceManagerPtr_(&referenceManager)
+  , eeLinearConstraintPtr_(new EndEffectorLinearConstraint(endEffectorKinematics, 2))
   , contactPointIndex_(contactPointIndex)
-  , info_(std::move(info))
 {
 }
 
 /******************************************************************************************************/
 /******************************************************************************************************/
 /******************************************************************************************************/
-bool ZeroForceConstraint::isActive(scalar_t time) const
+XYReferenceConstraintCppAd::XYReferenceConstraintCppAd(const XYReferenceConstraintCppAd& rhs)
+  : StateInputConstraint(rhs)
+  , referenceManagerPtr_(rhs.referenceManagerPtr_)
+  , eeLinearConstraintPtr_(rhs.eeLinearConstraintPtr_->clone())
+  , contactPointIndex_(rhs.contactPointIndex_)
+{
+}
+
+/******************************************************************************************************/
+/******************************************************************************************************/
+/******************************************************************************************************/
+bool XYReferenceConstraintCppAd::isActive(scalar_t time) const
 {
   return !referenceManagerPtr_->getContactFlags(time)[contactPointIndex_];
 }
@@ -65,31 +76,25 @@ bool ZeroForceConstraint::isActive(scalar_t time) const
 /******************************************************************************************************/
 /******************************************************************************************************/
 /******************************************************************************************************/
-vector_t ZeroForceConstraint::getValue(scalar_t time, const vector_t& state, const vector_t& input,
-                                       const PreComputation& preComp) const
+vector_t XYReferenceConstraintCppAd::getValue(scalar_t time, const vector_t& state, const vector_t& input,
+                                              const PreComputation& preComp) const
 {
-  vector_t force(getNumConstraints(time));
-  force << centroidal_model::getContactForces(input, contactPointIndex_, info_);
-  return force;
+  const auto& preCompLegged = cast<LeggedRobotPreComputation>(preComp);
+  eeLinearConstraintPtr_->configure(preCompLegged.getEeXYReferenceConstraintConfigs()[contactPointIndex_]);
+
+  return eeLinearConstraintPtr_->getValue(time, state, input, preComp);
 }
 
 /******************************************************************************************************/
 /******************************************************************************************************/
 /******************************************************************************************************/
-VectorFunctionLinearApproximation ZeroForceConstraint::getLinearApproximation(scalar_t time, const vector_t& state,
-                                                                              const vector_t& input,
-                                                                              const PreComputation& preComp) const
+VectorFunctionLinearApproximation XYReferenceConstraintCppAd::getLinearApproximation(
+    scalar_t time, const vector_t& state, const vector_t& input, const PreComputation& preComp) const
 {
-  VectorFunctionLinearApproximation approx;
-  approx.f = getValue(time, state, input, preComp);
-  approx.dfdx = matrix_t::Zero(getNumConstraints(time), state.size());
-  approx.dfdu = matrix_t::Zero(getNumConstraints(time), input.size());
-  const size_t contactForceIndex = 3 * contactPointIndex_;
-  const size_t contactWrenchIndex =
-      3 * info_.numThreeDofContacts + 6 * (contactPointIndex_ - info_.numThreeDofContacts);
-  const size_t startRow = (contactPointIndex_ < info_.numThreeDofContacts) ? contactForceIndex : contactWrenchIndex;
-  approx.dfdu.middleCols(startRow, getNumConstraints(time)).diagonal() = vector_t::Ones(getNumConstraints(time));
-  return approx;
+  const auto& preCompLegged = cast<LeggedRobotPreComputation>(preComp);
+  eeLinearConstraintPtr_->configure(preCompLegged.getEeXYReferenceConstraintConfigs()[contactPointIndex_]);
+
+  return eeLinearConstraintPtr_->getLinearApproximation(time, state, input, preComp);
 }
 
 }  // namespace legged_robot

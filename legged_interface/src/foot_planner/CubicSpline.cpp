@@ -34,9 +34,7 @@ For further information, contact: contact@bridgedp.com or visit our website
 at www.bridgedp.com.
 ********************************************************************************/
 
-#include "legged_interface/constraint/ZeroForceConstraint.h"
-
-#include <ocs2_centroidal_model/AccessHelperFunctions.h>
+#include "legged_interface/foot_planner/CubicSpline.h"
 
 namespace ocs2
 {
@@ -45,51 +43,84 @@ namespace legged_robot
 /******************************************************************************************************/
 /******************************************************************************************************/
 /******************************************************************************************************/
-ZeroForceConstraint::ZeroForceConstraint(const SwitchedModelReferenceManager& referenceManager,
-                                         size_t contactPointIndex, CentroidalModelInfo info)
-  : StateInputConstraint(ConstraintOrder::Linear)
-  , referenceManagerPtr_(&referenceManager)
-  , contactPointIndex_(contactPointIndex)
-  , info_(std::move(info))
+CubicSpline::CubicSpline(Node start, Node end)
 {
+  start_ = start;
+  end_ = end;
+  assert(start.time < end.time);
+  t0_ = start.time;
+  t1_ = end.time;
+  dt_ = end.time - start.time;
+
+  scalar_t dp = end.position - start.position;
+  scalar_t dv = end.velocity - start.velocity;
+
+  dc0_ = 0.0;
+  dc1_ = start.velocity;
+  dc2_ = -(3.0 * start.velocity + dv);
+  dc3_ = (2.0 * start.velocity + dv);
+
+  c0_ = dc0_ * dt_ + start.position;
+  c1_ = dc1_ * dt_;
+  c2_ = dc2_ * dt_ + 3.0 * dp;
+  c3_ = dc3_ * dt_ - 2.0 * dp;
 }
 
 /******************************************************************************************************/
 /******************************************************************************************************/
 /******************************************************************************************************/
-bool ZeroForceConstraint::isActive(scalar_t time) const
+scalar_t CubicSpline::position(scalar_t time) const
 {
-  return !referenceManagerPtr_->getContactFlags(time)[contactPointIndex_];
+  scalar_t tn = normalizedTime(time);
+  return c3_ * tn * tn * tn + c2_ * tn * tn + c1_ * tn + c0_;
 }
 
 /******************************************************************************************************/
 /******************************************************************************************************/
 /******************************************************************************************************/
-vector_t ZeroForceConstraint::getValue(scalar_t time, const vector_t& state, const vector_t& input,
-                                       const PreComputation& preComp) const
+scalar_t CubicSpline::velocity(scalar_t time) const
 {
-  vector_t force(getNumConstraints(time));
-  force << centroidal_model::getContactForces(input, contactPointIndex_, info_);
-  return force;
+  scalar_t tn = normalizedTime(time);
+  return (3.0 * c3_ * tn * tn + 2.0 * c2_ * tn + c1_) / dt_;
 }
 
 /******************************************************************************************************/
 /******************************************************************************************************/
 /******************************************************************************************************/
-VectorFunctionLinearApproximation ZeroForceConstraint::getLinearApproximation(scalar_t time, const vector_t& state,
-                                                                              const vector_t& input,
-                                                                              const PreComputation& preComp) const
+scalar_t CubicSpline::acceleration(scalar_t time) const
 {
-  VectorFunctionLinearApproximation approx;
-  approx.f = getValue(time, state, input, preComp);
-  approx.dfdx = matrix_t::Zero(getNumConstraints(time), state.size());
-  approx.dfdu = matrix_t::Zero(getNumConstraints(time), input.size());
-  const size_t contactForceIndex = 3 * contactPointIndex_;
-  const size_t contactWrenchIndex =
-      3 * info_.numThreeDofContacts + 6 * (contactPointIndex_ - info_.numThreeDofContacts);
-  const size_t startRow = (contactPointIndex_ < info_.numThreeDofContacts) ? contactForceIndex : contactWrenchIndex;
-  approx.dfdu.middleCols(startRow, getNumConstraints(time)).diagonal() = vector_t::Ones(getNumConstraints(time));
-  return approx;
+  scalar_t tn = normalizedTime(time);
+  return (6.0 * c3_ * tn + 2.0 * c2_) / (dt_ * dt_);
+}
+
+/******************************************************************************************************/
+/******************************************************************************************************/
+/******************************************************************************************************/
+scalar_t CubicSpline::startTimeDerivative(scalar_t t) const
+{
+  scalar_t tn = normalizedTime(t);
+  scalar_t dCoff = -(dc3_ * tn * tn * tn + dc2_ * tn * tn + dc1_ * tn + dc0_);
+  scalar_t dTn = -(t1_ - t) / (dt_ * dt_);
+  return velocity(t) * dt_ * dTn + dCoff;
+}
+
+/******************************************************************************************************/
+/******************************************************************************************************/
+/******************************************************************************************************/
+scalar_t CubicSpline::finalTimeDerivative(scalar_t t) const
+{
+  scalar_t tn = normalizedTime(t);
+  scalar_t dCoff = (dc3_ * tn * tn * tn + dc2_ * tn * tn + dc1_ * tn + dc0_);
+  scalar_t dTn = -(t - t0_) / (dt_ * dt_);
+  return velocity(t) * dt_ * dTn + dCoff;
+}
+
+/******************************************************************************************************/
+/******************************************************************************************************/
+/******************************************************************************************************/
+scalar_t CubicSpline::normalizedTime(scalar_t t) const
+{
+  return (t - t0_) / dt_;
 }
 
 }  // namespace legged_robot

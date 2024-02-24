@@ -34,47 +34,76 @@ For further information, contact: contact@bridgedp.com or visit our website
 at www.bridgedp.com.
 ********************************************************************************/
 
-#include "legged_interface/initialization/LeggedRobotInitializer.h"
+#pragma once
 
-#include <ocs2_centroidal_model/AccessHelperFunctions.h>
-#include <legged_interface/common/utils.h>
+#include <mutex>
+
+#include <ocs2_core/misc/Lookup.h>
+#include <ocs2_core/reference/ModeSchedule.h>
+
+#include "legged_interface/gait/ModeSequenceTemplate.h"
 
 namespace ocs2
 {
 namespace legged_robot
 {
-/******************************************************************************************************/
-/******************************************************************************************************/
-/******************************************************************************************************/
-LeggedRobotInitializer::LeggedRobotInitializer(CentroidalModelInfo info,
-                                               const SwitchedModelReferenceManager& referenceManager,
-                                               bool extendNormalizedMomentum)
-  : info_(std::move(info)), referenceManagerPtr_(&referenceManager), extendNormalizedMomentum_(extendNormalizedMomentum)
+class GaitSchedule
 {
-}
+public:
+  GaitSchedule(ModeSchedule initModeSchedule, ModeSequenceTemplate initModeSequenceTemplate,
+               scalar_t phaseTransitionStanceTime);
 
-/******************************************************************************************************/
-/******************************************************************************************************/
-/******************************************************************************************************/
-LeggedRobotInitializer* LeggedRobotInitializer::clone() const
-{
-  return new LeggedRobotInitializer(*this);
-}
-
-/******************************************************************************************************/
-/******************************************************************************************************/
-/******************************************************************************************************/
-void LeggedRobotInitializer::compute(scalar_t time, const vector_t& state, scalar_t nextTime, vector_t& input,
-                                     vector_t& nextState)
-{
-  const auto contactFlags = referenceManagerPtr_->getContactFlags(time);
-  input = weightCompensatingInput(info_, contactFlags);
-  nextState = state;
-  if (!extendNormalizedMomentum_)
+  /**
+   * Sets the mode schedule.
+   *
+   * @param [in] modeSchedule: The mode schedule to be used.
+   */
+  void setModeSchedule(const ModeSchedule& modeSchedule)
   {
-    centroidal_model::getNormalizedMomentum(nextState, info_).setZero();
+    modeSchedule_ = modeSchedule;
   }
-}
+
+  /**
+   * Gets the mode schedule.
+   *
+   * @param [in] lowerBoundTime: The smallest time for which the ModeSchedule should be defined.
+   * @param [in] upperBoundTime: The greatest time for which the ModeSchedule should be defined.
+   */
+  ModeSchedule getModeSchedule(scalar_t lowerBoundTime, scalar_t upperBoundTime);
+
+  ModeSchedule& getModeScheduleSelf()
+  {
+    return modeSchedule_;
+  }
+
+  /**
+   * Used to insert a new user defined logic in the given time period.
+   *
+   * @param [in] startTime: The initial time from which the new mode sequence template should start.
+   * @param [in] finalTime: The final time until when the new mode sequence needs to be defined.
+   */
+  void insertModeSequenceTemplate(const ModeSequenceTemplate& modeSequenceTemplate, scalar_t startTime,
+                                  scalar_t finalTime);
+
+  ModeSequenceTemplate& getModeSequenceTemplate()
+  {
+    return modeSequenceTemplate_;
+  }
+
+private:
+  /**
+   * Extends the switch information from lowerBoundTime to upperBoundTime based on the template mode sequence.
+   *
+   * @param [in] startTime: The initial time from which the mode schedule should be appended with the template.
+   * @param [in] finalTime: The final time to which the mode schedule should be appended with the template.
+   */
+  void tileModeSequenceTemplate(scalar_t startTime, scalar_t finalTime);
+
+private:
+  ModeSchedule modeSchedule_;
+  ModeSequenceTemplate modeSequenceTemplate_;
+  scalar_t phaseTransitionStanceTime_;
+};
 
 }  // namespace legged_robot
 }  // namespace ocs2

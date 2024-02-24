@@ -34,9 +34,10 @@ For further information, contact: contact@bridgedp.com or visit our website
 at www.bridgedp.com.
 ********************************************************************************/
 
-#include "legged_interface/constraint/ZeroForceConstraint.h"
+#include "legged_interface/gait/ModeSequenceTemplate.h"
 
-#include <ocs2_centroidal_model/AccessHelperFunctions.h>
+#include <ocs2_core/misc/Display.h>
+#include <ocs2_core/misc/LoadData.h>
 
 namespace ocs2
 {
@@ -45,51 +46,84 @@ namespace legged_robot
 /******************************************************************************************************/
 /******************************************************************************************************/
 /******************************************************************************************************/
-ZeroForceConstraint::ZeroForceConstraint(const SwitchedModelReferenceManager& referenceManager,
-                                         size_t contactPointIndex, CentroidalModelInfo info)
-  : StateInputConstraint(ConstraintOrder::Linear)
-  , referenceManagerPtr_(&referenceManager)
-  , contactPointIndex_(contactPointIndex)
-  , info_(std::move(info))
+std::ostream& operator<<(std::ostream& stream, const ModeSequenceTemplate& modeSequenceTemplate)
 {
+  stream << "Template switching times: {" << toDelimitedString(modeSequenceTemplate.switchingTimes) << "}\n";
+  stream << "Template mode sequence:   {" << toDelimitedString(modeSequenceTemplate.modeSequence) << "}\n";
+  return stream;
 }
 
 /******************************************************************************************************/
 /******************************************************************************************************/
 /******************************************************************************************************/
-bool ZeroForceConstraint::isActive(scalar_t time) const
+ModeSequenceTemplate loadModeSequenceTemplate(const std::string& filename, const std::string& topicName, bool verbose)
 {
-  return !referenceManagerPtr_->getContactFlags(time)[contactPointIndex_];
+  std::vector<scalar_t> switchingTimes;
+  loadData::loadStdVector(filename, topicName + ".switchingTimes", switchingTimes, verbose);
+
+  std::vector<std::string> modeSequenceString;
+  loadData::loadStdVector(filename, topicName + ".modeSequence", modeSequenceString, verbose);
+
+  if (switchingTimes.empty() || modeSequenceString.empty())
+  {
+    throw std::runtime_error("[loadModeSequenceTemplate] failed to load : " + topicName + " from " + filename);
+  }
+
+  // convert the mode name to mode enum
+  std::vector<size_t> modeSequence;
+  modeSequence.reserve(modeSequenceString.size());
+  for (const auto& modeName : modeSequenceString)
+  {
+    modeSequence.push_back(string2ModeNumber(modeName));
+  }
+
+  return { switchingTimes, modeSequence };
 }
 
 /******************************************************************************************************/
 /******************************************************************************************************/
 /******************************************************************************************************/
-vector_t ZeroForceConstraint::getValue(scalar_t time, const vector_t& state, const vector_t& input,
-                                       const PreComputation& preComp) const
+Gait toGait(const ModeSequenceTemplate& modeSequenceTemplate)
 {
-  vector_t force(getNumConstraints(time));
-  force << centroidal_model::getContactForces(input, contactPointIndex_, info_);
-  return force;
+  const auto startTime = modeSequenceTemplate.switchingTimes.front();
+  const auto endTime = modeSequenceTemplate.switchingTimes.back();
+  Gait gait;
+  gait.duration = endTime - startTime;
+  // Events: from time -> phase
+  gait.eventPhases.reserve(modeSequenceTemplate.switchingTimes.size());
+  std::for_each(modeSequenceTemplate.switchingTimes.begin() + 1, modeSequenceTemplate.switchingTimes.end() - 1,
+                [&](scalar_t eventTime) { gait.eventPhases.push_back((eventTime - startTime) / gait.duration); });
+  // Modes:
+  gait.modeSequence = modeSequenceTemplate.modeSequence;
+  assert(isValidGait(gait));
+  return gait;
 }
 
 /******************************************************************************************************/
 /******************************************************************************************************/
 /******************************************************************************************************/
-VectorFunctionLinearApproximation ZeroForceConstraint::getLinearApproximation(scalar_t time, const vector_t& state,
-                                                                              const vector_t& input,
-                                                                              const PreComputation& preComp) const
+ModeSchedule loadModeSchedule(const std::string& filename, const std::string& topicName, bool verbose)
 {
-  VectorFunctionLinearApproximation approx;
-  approx.f = getValue(time, state, input, preComp);
-  approx.dfdx = matrix_t::Zero(getNumConstraints(time), state.size());
-  approx.dfdu = matrix_t::Zero(getNumConstraints(time), input.size());
-  const size_t contactForceIndex = 3 * contactPointIndex_;
-  const size_t contactWrenchIndex =
-      3 * info_.numThreeDofContacts + 6 * (contactPointIndex_ - info_.numThreeDofContacts);
-  const size_t startRow = (contactPointIndex_ < info_.numThreeDofContacts) ? contactForceIndex : contactWrenchIndex;
-  approx.dfdu.middleCols(startRow, getNumConstraints(time)).diagonal() = vector_t::Ones(getNumConstraints(time));
-  return approx;
+  std::vector<scalar_t> eventTimes;
+  loadData::loadStdVector(filename, topicName + ".eventTimes", eventTimes, verbose);
+
+  std::vector<std::string> modeSequenceString;
+  loadData::loadStdVector(filename, topicName + ".modeSequence", modeSequenceString, verbose);
+
+  if (modeSequenceString.empty())
+  {
+    throw std::runtime_error("[loadModeSchedule] failed to load : " + topicName + " from " + filename);
+  }
+
+  // convert the mode name to mode enum
+  std::vector<size_t> modeSequence;
+  modeSequence.reserve(modeSequenceString.size());
+  for (const auto& modeName : modeSequenceString)
+  {
+    modeSequence.push_back(string2ModeNumber(modeName));
+  }
+
+  return { eventTimes, modeSequence };
 }
 
 }  // namespace legged_robot

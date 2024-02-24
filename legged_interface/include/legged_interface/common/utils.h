@@ -34,9 +34,17 @@ For further information, contact: contact@bridgedp.com or visit our website
 at www.bridgedp.com.
 ********************************************************************************/
 
-#include "legged_interface/constraint/ZeroForceConstraint.h"
+#pragma once
+
+#include <array>
+#include <cppad/cg.hpp>
+#include <iostream>
+#include <memory>
 
 #include <ocs2_centroidal_model/AccessHelperFunctions.h>
+#include <ocs2_robotic_tools/common/RotationTransforms.h>
+
+#include "legged_interface/common/Types.h"
 
 namespace ocs2
 {
@@ -45,51 +53,43 @@ namespace legged_robot
 /******************************************************************************************************/
 /******************************************************************************************************/
 /******************************************************************************************************/
-ZeroForceConstraint::ZeroForceConstraint(const SwitchedModelReferenceManager& referenceManager,
-                                         size_t contactPointIndex, CentroidalModelInfo info)
-  : StateInputConstraint(ConstraintOrder::Linear)
-  , referenceManagerPtr_(&referenceManager)
-  , contactPointIndex_(contactPointIndex)
-  , info_(std::move(info))
+/** Counts contact feet */
+inline size_t numberOfClosedContacts(const contact_flag_t& contactFlags)
 {
+  size_t numStanceLegs = 0;
+  for (auto legInContact : contactFlags)
+  {
+    if (legInContact)
+    {
+      ++numStanceLegs;
+    }
+  }
+  return numStanceLegs;
 }
 
 /******************************************************************************************************/
 /******************************************************************************************************/
 /******************************************************************************************************/
-bool ZeroForceConstraint::isActive(scalar_t time) const
+/** Computes an input with zero joint velocity and forces which equally distribute the robot weight between contact
+ * feet. */
+inline vector_t weightCompensatingInput(const CentroidalModelInfoTpl<scalar_t>& info,
+                                        const contact_flag_t& contactFlags)
 {
-  return !referenceManagerPtr_->getContactFlags(time)[contactPointIndex_];
-}
-
-/******************************************************************************************************/
-/******************************************************************************************************/
-/******************************************************************************************************/
-vector_t ZeroForceConstraint::getValue(scalar_t time, const vector_t& state, const vector_t& input,
-                                       const PreComputation& preComp) const
-{
-  vector_t force(getNumConstraints(time));
-  force << centroidal_model::getContactForces(input, contactPointIndex_, info_);
-  return force;
-}
-
-/******************************************************************************************************/
-/******************************************************************************************************/
-/******************************************************************************************************/
-VectorFunctionLinearApproximation ZeroForceConstraint::getLinearApproximation(scalar_t time, const vector_t& state,
-                                                                              const vector_t& input,
-                                                                              const PreComputation& preComp) const
-{
-  VectorFunctionLinearApproximation approx;
-  approx.f = getValue(time, state, input, preComp);
-  approx.dfdx = matrix_t::Zero(getNumConstraints(time), state.size());
-  approx.dfdu = matrix_t::Zero(getNumConstraints(time), input.size());
-  const size_t contactForceIndex = 3 * contactPointIndex_;
-  const size_t contactWrenchIndex =
-      3 * info_.numThreeDofContacts + 6 * (contactPointIndex_ - info_.numThreeDofContacts);
-  const size_t startRow = (contactPointIndex_ < info_.numThreeDofContacts) ? contactForceIndex : contactWrenchIndex;
-  approx.dfdu.middleCols(startRow, getNumConstraints(time)).diagonal() = vector_t::Ones(getNumConstraints(time));
-  return approx;
+  const auto numStanceLegs = numberOfClosedContacts(contactFlags);
+  vector_t input = vector_t::Zero(info.inputDim);
+  if (numStanceLegs > 0)
+  {
+    const scalar_t totalWeight = info.robotMass * 9.81;
+    const vector3_t forceInInertialFrame(0.0, 0.0, totalWeight / numStanceLegs);
+    for (size_t i = 0; i < contactFlags.size(); i++)
+    {
+      if (contactFlags[i])
+      {
+        centroidal_model::getContactForces(input, i, info) = forceInInertialFrame;
+      }
+    }  // end of i loop
+  }
+  return input;
 }
 
 }  // namespace legged_robot

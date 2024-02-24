@@ -34,47 +34,58 @@ For further information, contact: contact@bridgedp.com or visit our website
 at www.bridgedp.com.
 ********************************************************************************/
 
-#include "legged_interface/initialization/LeggedRobotInitializer.h"
+#pragma once
 
-#include <ocs2_centroidal_model/AccessHelperFunctions.h>
-#include <legged_interface/common/utils.h>
+#include <ocs2_core/constraint/StateInputConstraint.h>
+
+#include "legged_interface/SwitchedModelReferenceManager.h"
+#include "legged_interface/constraint/EndEffectorLinearConstraint.h"
 
 namespace ocs2
 {
 namespace legged_robot
 {
-/******************************************************************************************************/
-/******************************************************************************************************/
-/******************************************************************************************************/
-LeggedRobotInitializer::LeggedRobotInitializer(CentroidalModelInfo info,
-                                               const SwitchedModelReferenceManager& referenceManager,
-                                               bool extendNormalizedMomentum)
-  : info_(std::move(info)), referenceManagerPtr_(&referenceManager), extendNormalizedMomentum_(extendNormalizedMomentum)
+/**
+ * Specializes the CppAd version of normal velocity constraint on an end-effector position and linear velocity.
+ * Constructs the member EndEffectorLinearConstraint object with number of constraints of 1.
+ *
+ * See also EndEffectorLinearConstraint for the underlying computation.
+ */
+class XYReferenceConstraintCppAd final : public StateInputConstraint
 {
-}
+public:
+  /**
+   * Constructor
+   * @param [in] referenceManager : Switched model ReferenceManager
+   * @param [in] endEffectorKinematics: The kinematic interface to the target end-effector.
+   * @param [in] contactPointIndex : The 3 DoF contact index.
+   */
+  XYReferenceConstraintCppAd(const SwitchedModelReferenceManager& referenceManager,
+                             const EndEffectorKinematics<scalar_t>& endEffectorKinematics, size_t contactPointIndex);
 
-/******************************************************************************************************/
-/******************************************************************************************************/
-/******************************************************************************************************/
-LeggedRobotInitializer* LeggedRobotInitializer::clone() const
-{
-  return new LeggedRobotInitializer(*this);
-}
-
-/******************************************************************************************************/
-/******************************************************************************************************/
-/******************************************************************************************************/
-void LeggedRobotInitializer::compute(scalar_t time, const vector_t& state, scalar_t nextTime, vector_t& input,
-                                     vector_t& nextState)
-{
-  const auto contactFlags = referenceManagerPtr_->getContactFlags(time);
-  input = weightCompensatingInput(info_, contactFlags);
-  nextState = state;
-  if (!extendNormalizedMomentum_)
+  ~XYReferenceConstraintCppAd() override = default;
+  XYReferenceConstraintCppAd* clone() const override
   {
-    centroidal_model::getNormalizedMomentum(nextState, info_).setZero();
+    return new XYReferenceConstraintCppAd(*this);
   }
-}
+
+  bool isActive(scalar_t time) const override;
+  size_t getNumConstraints(scalar_t time) const override
+  {
+    return 2;
+  }
+  vector_t getValue(scalar_t time, const vector_t& state, const vector_t& input,
+                    const PreComputation& preComp) const override;
+  VectorFunctionLinearApproximation getLinearApproximation(scalar_t time, const vector_t& state, const vector_t& input,
+                                                           const PreComputation& preComp) const override;
+
+private:
+  XYReferenceConstraintCppAd(const XYReferenceConstraintCppAd& rhs);
+
+  const SwitchedModelReferenceManager* referenceManagerPtr_;
+  std::unique_ptr<EndEffectorLinearConstraint> eeLinearConstraintPtr_;
+  const size_t contactPointIndex_;
+};
 
 }  // namespace legged_robot
 }  // namespace ocs2
