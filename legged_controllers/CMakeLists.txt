@@ -15,10 +15,18 @@ find_package(catkin REQUIRED
         ocs2_legged_robot_ros
         ocs2_self_collision_visualization
         angles
+        dynamic_reconfigure
+        rospy
+        std_msgs
+        message_generation
         )
 
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(pinocchio REQUIRED pinocchio)
+
+generate_dynamic_reconfigure_options(  
+        cfg/Tutorials.cfg
+        )
 
 catkin_package(
         INCLUDE_DIRS
@@ -35,6 +43,10 @@ catkin_package(
         ocs2_legged_robot_ros
         ocs2_self_collision_visualization
         angles
+        dynamic_reconfigure
+        rospy
+        std_msgs
+        message_generation
 )
 
 ###########
@@ -51,11 +63,13 @@ link_directories(
         ${pinocchio_LIBRARY_DIRS}
 )
 
+
 ## Declare a cpp library
 add_library(${PROJECT_NAME}
         src/LeggedController.cpp
+        src/utilities.cpp
         )
-
+        
 target_link_libraries(${PROJECT_NAME}
         ${catkin_LIBRARIES}
         ${pinocchio_LIBRARIES}

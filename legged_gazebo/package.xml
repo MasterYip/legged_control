@@ -3,9 +3,8 @@
     <name>legged_gazebo</name>
     <version>0.0.0</version>
     <description>The legged_gazebo packages.</description>
-    <maintainer email="liaoqiayuan@gmail.com">Qiayuan Liao</maintainer>
-    <license>BSD</license>
-    <author email="liaoqiayuan@gmail.com">Qiayuan Liao</author>
+    <maintainer email="contact@bridgedp.com">bridgedp</maintainer>
+    <license>MIT</license>
 
     <!-- buildtool_depend: dependencies of the build process -->
     <buildtool_depend>catkin</buildtool_depend>
