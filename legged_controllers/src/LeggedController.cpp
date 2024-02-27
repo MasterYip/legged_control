@@ -113,7 +113,7 @@ void LeggedController::update(const ros::Time& time, const ros::Duration& period
   size_t plannedMode = 0;  // The mode that is active at the time the policy is evaluated at.
   mpcMrtInterface_->evaluatePolicy(currentObservation_.time, currentObservation_.state, optimizedState, optimizedInput, plannedMode);
 
-  // Whole body control
+  // Whole body control (parameter definition can be found in the task file)
   currentObservation_.input = optimizedInput;
 
   wbcTimer_.startTimer();
