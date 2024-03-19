@@ -21,8 +21,8 @@ vector_t WeightedWbc::update(const vector_t& stateDesired, const vector_t& input
   A << constraints.a_,
        constraints.d_;
 
-  lbA << constraints.b_,
-         -qpOASES::INFTY * vector_t::Ones(constraints.f_.size());
+  lbA << constraints.b_, // Equality constraints
+         -qpOASES::INFTY * vector_t::Ones(constraints.f_.size()); // Inequality constraints
   ubA << constraints.b_,
          constraints.f_;  // clang-format on
 
