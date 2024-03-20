@@ -23,7 +23,7 @@ namespace legged
         inputLast_(vector_t::Zero(info_.inputDim)),
         eeKinematics_(eeKinematics.clone())
   {
-    // Generalized coordinates, GroundReactForce, and JointTorque
+    // Generalized coordinates acc?, GroundReactForce, and JointTorque
     numDecisionVars_ = info_.generalizedCoordinatesNum + 3 * info_.numThreeDofContacts + info_.actuatedDofNum;
     qMeasured_ = vector_t(info_.generalizedCoordinatesNum); // Generalized coordinates pos
     vMeasured_ = vector_t(info_.generalizedCoordinatesNum); // Generalized coordinates vel
@@ -108,6 +108,7 @@ namespace legged
   {
     auto &data = pinocchioInterfaceMeasured_.getData();
 
+    // Selection matrix
     matrix_t s(info_.actuatedDofNum, info_.generalizedCoordinatesNum);
     s.block(0, 0, info_.actuatedDofNum, 6).setZero();
     s.block(0, 6, info_.actuatedDofNum, info_.actuatedDofNum).setIdentity();
@@ -123,13 +124,15 @@ namespace legged
     matrix_t d(2 * info_.actuatedDofNum, numDecisionVars_);
     d.setZero();
     matrix_t i = matrix_t::Identity(info_.actuatedDofNum, info_.actuatedDofNum);
+    // Upper bound
     d.block(0, info_.generalizedCoordinatesNum + 3 * info_.numThreeDofContacts, info_.actuatedDofNum, info_.actuatedDofNum) = i;
+    // Lower bound
     d.block(info_.actuatedDofNum, info_.generalizedCoordinatesNum + 3 * info_.numThreeDofContacts, info_.actuatedDofNum,
             info_.actuatedDofNum) = -i;
     vector_t f(2 * info_.actuatedDofNum);
     for (size_t l = 0; l < 2 * info_.actuatedDofNum / 3; ++l)
     {
-      f.segment<3>(3 * l) = torqueLimits_;
+      f.segment<3>(3 * l) = torqueLimits_; // [HAA HFE KFE]
     }
 
     return {matrix_t(), vector_t(), d, f};
@@ -164,6 +167,7 @@ namespace legged
     {
       if (!contactFlag_[i])
       {
+        // Non-contact, let lambda (contact force) be 0
         a.block(3 * j++, info_.generalizedCoordinatesNum + 3 * i, 3, 3) = matrix_t::Identity(3, 3);
       }
     }
@@ -171,11 +175,12 @@ namespace legged
     b.setZero();
 
     matrix_t frictionPyramic(5, 3); // clang-format off
-  frictionPyramic << 0, 0, -1,
-                     1, 0, -frictionCoeff_,
-                    -1, 0, -frictionCoeff_,
-                     0, 1, -frictionCoeff_,
-                     0,-1, -frictionCoeff_; // clang-format on
+    // H-rep of the friction cone
+    frictionPyramic << 0, 0, -1,
+                      1, 0, -frictionCoeff_,
+                      -1, 0, -frictionCoeff_,
+                      0, 1, -frictionCoeff_,
+                      0,-1, -frictionCoeff_; // clang-format on
 
     matrix_t d(5 * numContacts_ + 3 * (info_.numThreeDofContacts - numContacts_), numDecisionVars_);
     d.setZero();
